@@ -1,0 +1,2 @@
+# SEO_image_optimize
+Squoosh CLIを使った画像最適化スクリプトです
