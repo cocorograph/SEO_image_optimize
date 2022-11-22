@@ -9,17 +9,17 @@ SEOなど、Web使用用途で画像最適化を行うための、Squoosh CLIを
 
 ## インストール方法
 ### node.js
-いわずもがな。
+いわずもがな。  
 [https://nodejs.org/ja/download/](https://nodejs.org/ja/download/)
 
 ### squoosh-cli
-squooshをcliで使えるようにするためのもの。
-Terminal.appで下記を実行
+squooshをcliで使えるようにするためのもの。  
+Terminal.appで下記を実行  
 `sudo npm i -g @squoosh/cli`
 
 ### gtimeout
-bash で gtimeout (タイムアウト処理) が使えるようにするためのもの。
-Terminal.appで下記を実行
+bash で gtimeout (タイムアウト処理) が使えるようにするためのもの。  
+Terminal.appで下記を実行  
 `brew install coreutils`
 
 上記インストールで準備完了！
@@ -29,5 +29,5 @@ Terminal.appで下記を実行
 2. ダウンロードしたcommanddファイルを、最適化したい画像が格納されたディレクトリに移動
 3. ダブルクリックで実行
 
-詳細はこちらの記事でも解説しています。
+詳細はこちらの記事でも解説しています。  
 [SEOの画像最適化を一括で超簡単に行う方法【squoosh-cli】](https://cocorograph.co/knowledge/easy-to-optimize-images/)
