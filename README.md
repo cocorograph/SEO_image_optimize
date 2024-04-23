@@ -1,33 +1,26 @@
 # SEO_image_optimize
-SEOなど、Web使用用途で画像最適化を行うための、Squoosh CLIを使った画像最適化スクリプトです。  
+
+SEOなど、Web使用用途で画像最適化を行うための、sharpを使った画像最適化スクリプトです。
+v2になって、sqoosh-cliからsharpでの変換に変更しています。
 制作会社さんなどに有用かと思います。
 
-本スクリプトでは下記のインストールが前提となっています。
-- node.js
-- squoosh-cli
-- gtimeout
+本スクリプトではNode.jsのインストールが前提となっています。
 
-## インストール方法
-### node.js
-いわずもがな。  
+
+## Node.jsインストール方法
+
 [https://nodejs.org/ja/download/](https://nodejs.org/ja/download/)
 
-### squoosh-cli
-squooshをcliで使えるようにするためのもの。  
-Terminal.appで下記を実行  
-`sudo npm i -g @squoosh/cli`
 
-### gtimeout
-bash で gtimeout (タイムアウト処理) が使えるようにするためのもの。  
-Terminal.appで下記を実行  
-`brew install coreutils`
+## 使い方
 
-上記インストールで準備完了！
+SEO_image_optimize.command が本体です。
+SEO_image_optimize.command と同一ディレクトリに、変換前、変換済フォルダが必要です。
+変換前フォルダに、圧縮したい画像を入れて、SEO_image_optimize.commandをダブルクリックして実行してください。
+変換前フォルダに格納されているディレクトリ構成どおりに、変換済フォルダに画像が格納されます。
 
-## 実行方法（簡易）
-1. 本スクリプトをダウンロード
-2. ダウンロードしたcommanddファイルを、最適化したい画像が格納されたディレクトリに移動
-3. ダブルクリックで実行
+権限不足で実行できない場合は、ターミナルで以下のコマンドで権限を付与してから再度実行してください。
 
-詳細はこちらの記事でも解説しています。  
-[SEOの画像最適化を一括で超簡単に行う方法【squoosh-cli】](https://cocorograph.co/knowledge/easy-to-optimize-images/)
+```
+chmod +x 変換実行.command
+```

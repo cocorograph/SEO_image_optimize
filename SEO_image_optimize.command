@@ -1,501 +1,216 @@
 #!/bin/bash
+#MY_DIRNAME=$(dirname $0)
+MY_DIRNAME=$(cd $(dirname $0);pwd)
+cd $MY_DIRNAME
 
-# 一括処理を行う上限ファイル数（拡張子毎）
-maxfilenum=500
-#タイムアウトの時間設定
-single_timeo_sec=5
+# package.json を作成
+cat <<EOF >package.json
+{
+  "name": "image-format-converter",
+  "version": "1.0.0",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "image-format-converter": "node ./image-format-converter.js"
+  },
+  "type": "module",
+  "devDependencies": {
+    "ansi-colors": "^4.1.3",
+    "fancy-log": "^2.0.0",
+    "globule": "^1.3.4",
+    "sharp": "^0.33.3"
+  }
+}
+EOF
 
-# 実行ディレクトリへ移動
-cd `dirname $0`
+echo "package.jsonを作成しました。"
 
-# 処理を選択
-PS3='処理を数字で選択してください。'
-select num in "jpg・pngを圧縮しwebp生成" "jpg・pngを圧縮のみ" "キャンセル"
-# @TODO 追加で圧縮の強さを3段階くらいで設定できるようにしたい
-do
-  case $num in
-    "jpg・pngを圧縮しwebp生成")
-        # ディレクトリ一覧取得
-        dirlist=($(find . -mindepth 1 -type d -name \*))
+# image-format-converter.js を作成
+cat <<'EOF' >image-format-converter.js
+import c from 'ansi-colors'
+import log from 'fancy-log'
+import fs from 'fs'
+import globule from 'globule'
+import sharp from 'sharp'
 
-        # ディレクトリ毎に処理を行うため、変数dirlistを配列で処理
-        for filedir in "${dirlist[@]}";
-        do
-            # jpgファイルの個数を確認
-            count_img=($(find ${filedir} -maxdepth 1 -type f -name \*.jpg | wc -l))
-            if [ $count_img = 0 ] ; then
-                :
-            # ファイル個数がmaxfilenum以上だったら
-            elif [ $count_img -gt $maxfilenum ] ; then
+class ImageFormatConverter {
+  constructor(options = {}) {
+    this.srcBase = options.srcBase || '変換前'
+    this.destBase = options.destBase || '変換済'
+    this.includeExtensionName = options.includeExtensionName || false
+    this.formats = options.formats || [
+      // {
+      //   type: 'avif',
+      //   quality: 50
+      // },
+      {
+        type: 'webp',
+        quality: 50
+      },
+      {
+        type: 'jpg',
+        quality: 50
+      },
+      {
+        type: 'png',
+        quality: 50
+      }
+    ]
+    this.srcImages = `${this.srcBase}/**/*.{jpg,jpeg,png,webp,avif,gif,svg}`
+    this.init()
+  }
 
-                # jpgファイル名一覧を取得し、個別に処理
-                echo -e '\n##############################################################\n'${filedir}'のjpg最適化・webp変換を個別処理します。（'${count_img}'ファイル）'
-                filelist=($(find ${filedir} -maxdepth 1 -type f -name \*.jpg | sort -n))
-                i=${count_img}
-                for convert_img in "${filelist[@]}";
-                do
-                    gtimeout -sKILL ${single_timeo_sec} squoosh-cli --mozjpeg '{}' -d ${filedir}/ ${convert_img}
-                    if [ $? != 0 ]; then
-                      echo -e '\n'${convert_img}' は、タイムアウトのためスキップしました。'
-                    fi
-                    gtimeout -sKILL ${single_timeo_sec} squoosh-cli --webp '{}' -d ${filedir}/ ${convert_img}
-                    if [ $? != 0 ]; then
-                      echo -e '\n'${convert_img}' は、タイムアウトのためスキップしました。'
-                    fi
-                    i=$(($i - 1))
-                    echo '残り'${i}'ファイル'
-                done
-                echo -e '\n'${filedir}'のjpg最適化・webp変換完了。\n'
+  init = async () => {
+    const imagePathList = this.findImagePaths()
+    await this.convertImages(imagePathList)
+  }
 
-            else
+  /**
+   * globパターンで指定した画像パスを配列化して返す
+   * @return { array } 画像パスの配列
+   */
+  findImagePaths = () => {
+    return globule.find({
+      src: [this.srcImages]
+    })
+  }
 
-                # ファイル個数がmaxfilenum以下だったらjpg一括処理
-                echo -e '\n##############################################################\n'${filedir}'のjpg最適化・webp変換を一括処理します。（'${count_img}'ファイル）'
-                i=$((${count_img}*1))
-                gtimeout -sKILL $i squoosh-cli --mozjpeg '{}' -d ${filedir}/ ${filedir}/*.jpg
-                if [ $? != 0 ]; then
-                  echo -e '\n'${filedir}' のjpg最適化およびwebp変換はタイムアウトのため、個別変換に切り替えます。'
+  /**
+   * 画像を変換する
+   * @param { string } imagePath 画像パス
+   * @param { object } format 画像形式と圧縮品質
+   */
 
-                  filelist=($(find ${filedir} -maxdepth 1 -type f -name \*.jpg | sort -n))
-                  i=${count_img}
-                  for convert_img in "${filelist[@]}";
-                  do
-                      gtimeout -sKILL ${single_timeo_sec} squoosh-cli --mozjpeg '{}' -d ${filedir}/ ${convert_img}
-                      if [ $? != 0 ]; then
-                        echo -e '\n'${convert_img}' は、タイムアウトのためスキップしました。'
-                      fi
-                      gtimeout -sKILL ${single_timeo_sec} squoosh-cli --webp '{}' -d ${filedir}/ ${convert_img}
-                      if [ $? != 0 ]; then
-                        echo -e '\n'${convert_img}' は、タイムアウトのためスキップしました。'
-                      fi
-                      i=$(($i - 1))
-                      echo '残り'${i}'ファイル'
-                  done
-                  echo -e '\n'${filedir}'のjpg最適化・webp変換完了。\n'
+  convertImageFormat = async (imagePath, format) => {
+    const reg = /\/(.*)\.(jpe?g|png|webp|avif|gif|svg)$/i
+    const [, imageName, imageExtension] = imagePath.match(reg)
+    const imageFileName = this.includeExtensionName
+      ? `${imageName}.${imageExtension}`
+      : imageName
+    const destPath = `${this.destBase}/${imageFileName}.${format.type}`
 
-                else
-                  gtimeout -sKILL $i squoosh-cli --webp '{}' -d ${filedir}/ ${filedir}/*.jpg
-                  if [ $? != 0 ]; then
-                    echo -e '\n'${filedir}' のjpgファイルのwebp変換は、タイムアウトのため途中スキップしました。'
-                  else
-                    echo -e '\n'${filedir}'のjpg最適化・webp変換完了。\n'
-                  fi
-                fi
-            fi
+    // 画像がJPEG形式であるかをチェック
+    if (imageExtension.toLowerCase() === 'jpg' || imageExtension.toLowerCase() === 'jpeg') {
+      // 画像がJPEG形式である場合、かつformat.typeが'jpg'または'webp'である場合のみ変換を行う
+      if (format.type.toLowerCase() === 'jpg' || format.type.toLowerCase() === 'webp') {
+        await sharp(imagePath)
+        .toFormat(format.type, { quality: format.quality })
+        .toFile(destPath)
+        .then((info) => {
+          log(
+            `成功 ${c.blue(imagePath)} → ${c.yellow(
+              format.type.toUpperCase()
+            )} ${c.green(destPath)}`
+          )
+        })
+        .catch((err) => {
+          log(
+            c.red(
+              `エラー ${c.yellow(
+                format.type.toUpperCase()
+              )} ${c.red(destPath)}\n${err}`
+            )
+          )
+        })
+      }
+    } else if (imageExtension.toLowerCase() === 'png') {
+      // 画像がPNG形式である場合、かつformat.typeが'png'または'webp'である場合のみ変換を行う
+      if (format.type.toLowerCase() === 'png' || format.type.toLowerCase() === 'webp') {
+        await sharp(imagePath)
+        .toFormat(format.type, { quality: format.quality })
+        .toFile(destPath)
+        .then((info) => {
+          log(
+            `成功 ${c.blue(imagePath)} → ${c.yellow(
+              format.type.toUpperCase()
+            )} ${c.green(destPath)}`
+          )
+        })
+        .catch((err) => {
+          log(
+            c.red(
+              `エラー ${c.yellow(
+                format.type.toUpperCase()
+              )} ${c.red(destPath)}\n${err}`
+            )
+          )
+        })
+      }
+    } else if (format.type.toLowerCase() === 'webp') {
+      // 画像がJPEG形式でもPNG形式でもない場合、かつformat.typeが'webp'である場合のみ変換を行う
+      if (format.type.toLowerCase() === 'webp') {
+        await sharp(imagePath)
+        .toFormat(format.type, { quality: format.quality })
+        .toFile(destPath)
+        .then((info) => {
+          log(
+            `成功 ${c.blue(imagePath)} → ${c.yellow(
+              format.type.toUpperCase()
+            )} ${c.green(destPath)}`
+          )
+        })
+        .catch((err) => {
+          log(
+            c.red(
+              `エラー ${c.yellow(
+                format.type.toUpperCase()
+              )} ${c.red(destPath)}\n${err}`
+            )
+          )
+        })
+      }
+    } else if (format.type.toLowerCase() === 'avif' || format.type.toLowerCase() === 'gif' || format.type.toLowerCase() === 'svg') {
+      // 画像がJPEG形式でもPNG形式でもないが、format.typeが'webp'でない場合は、その旨をログに出力
+      fs.copyFileSync(imagePath, destPath)
+      log(`変換対象外: ${c.blue(imagePath)}`)
+    } else {
+      // なにもしない
+    }
+  }
 
-            count_img=($(find ${filedir} -maxdepth 1 -type f -name \*.png | wc -l))
-            if [ $count_img = 0 ] ; then
-                :
-            # ファイル個数がmaxfilenum以上だったら
-            elif [ $count_img -gt $maxfilenum ] ; then
+  /**
+   * 配列内の画像パスのファイルを変換する
+   * @param { array } imagePathList 画像パスの配列
+   */
+  convertImages = async (imagePathList) => {
+    if (imagePathList.length === 0) {
+      log(c.red('No images found to convert'))
+      return
+    }
+    for (const imagePath of imagePathList) {
+      const reg = new RegExp(`^${this.srcBase}/(.*/)?`)
+      const path = imagePath.match(reg)[1] || ''
+      const destDir = `${this.destBase}/${path}`
+      if (!fs.existsSync(destDir)) {
+        try {
+          fs.mkdirSync(destDir, { recursive: true })
+          log(`Created directory ${c.green(destDir)}`)
+        } catch (err) {
+          log(`Failed to create directory ${c.green(destDir)}\n${err}`)
+        }
+      }
+      const conversionPromises = this.formats.map((format) =>
+        this.convertImageFormat(imagePath, format)
+      )
+      await Promise.all(conversionPromises)
+    }
+  }
+}
+const imageFormatConverter = new ImageFormatConverter()
+EOF
 
-                # pngファイル名一覧を取得し、個別に処理
-                echo -e '\n##############################################################\n'${filedir}'のpng最適化・webp変換を個別処理します。（'${count_img}'ファイル）'
-                filelist=($(find ${filedir} -maxdepth 1 -type f -name \*.png | sort -n))
-                i=${count_img}
-                for convert_img in "${filelist[@]}";
-                do
-                    gtimeout -sKILL ${single_timeo_sec} squoosh-cli --oxipng '{}' -d ${filedir}/ ${convert_img}
-                    if [ $? != 0 ]; then
-                      echo -e '\n'${convert_img}' は、タイムアウトのためスキップしました。'
-                    fi
-                    gtimeout -sKILL ${single_timeo_sec} squoosh-cli --webp '{}' -d ${filedir}/ ${convert_img}
-                    if [ $? != 0 ]; then
-                      echo -e '\n'${convert_img}' は、タイムアウトのためスキップしました。'
-                    fi
-                    i=$(($i - 1))
-                    echo '残り'${i}'ファイル'
-                done
-                echo -e '\n'${filedir}'のpng最適化・webp変換完了。\n'
+echo "image-format-converter.jsを作成しました。"
 
-            else
+# 依存関係をインストール
+echo "環境構築を開始します..."
+npm i ansi-colors fancy-log globule sharp -D
 
-                # ファイル個数がmaxfilenum以下だったらpng一括処理
-                echo -e '\n##############################################################\n'${filedir}'のpng最適化・webp変換を一括処理します。（'${count_img}'ファイル）'
-                i=$((${count_img}*1))
-                gtimeout -sKILL $i squoosh-cli --oxipng '{}' -d ${filedir}/ ${filedir}/*.png
-                if [ $? != 0 ]; then
-                  echo -e '\n'${filedir}' のpng最適化およびwebp変換はタイムアウトのため、個別変換に切り替えます。'
+# スクリプトを実行
+echo "画像変換処理を開始します..."
+npm run image-format-converter
 
-                  filelist=($(find ${filedir} -maxdepth 1 -type f -name \*.png | sort -n))
-                  i=${count_img}
-                  for convert_img in "${filelist[@]}";
-                  do
-                      gtimeout -sKILL ${single_timeo_sec} squoosh-cli --oxipng '{}' -d ${filedir}/ ${convert_img}
-                      if [ $? != 0 ]; then
-                        echo -e '\n'${convert_img}' は、タイムアウトのためスキップしました。'
-                      fi
-                      gtimeout -sKILL ${single_timeo_sec} squoosh-cli --webp '{}' -d ${filedir}/ ${convert_img}
-                      if [ $? != 0 ]; then
-                        echo -e '\n'${convert_img}' は、タイムアウトのためスキップしました。'
-                      fi
-                      i=$(($i - 1))
-                      echo '残り'${i}'ファイル'
-                  done
-                  echo -e '\n'${filedir}'のpng最適化・webp変換完了。\n'
+# クリーンアップ
+echo "クリーンアップを開始します..."
+rm -rf node_modules package-lock.json package.json image-format-converter.js
 
-                else
-                  gtimeout -sKILL $i squoosh-cli --webp '{}' -d ${filedir}/ ${filedir}/*.png
-                  if [ $? != 0 ]; then
-                    echo -e '\n'${filedir}' のpngファイルのwebp変換は、タイムアウトのため途中スキップしました。'
-                  else
-                    echo -e '\n'${filedir}'のpng最適化・webp変換完了。\n'
-                  fi
-                fi
-            fi
-
-        done
-
-        # カレントディレクトリのjpgファイルの個数を確認
-        count_img=($(find . -maxdepth 1 -type f -name \*.jpg | wc -l))
-        if [ $count_img = 0 ] ; then
-            :
-        # ファイル個数がmaxfilenum以上だったら
-        elif [ $count_img -gt $maxfilenum ] ; then
-
-            # jpgファイル名一覧を取得し、個別に処理
-            echo -e '\n##############################################################\n./のjpg最適化・webp変換を個別処理します。（'${count_img}'ファイル）'
-            filelist=($(find . -maxdepth 1 -type f -name \*.jpg | sort -n))
-            i=${count_img}
-            for convert_img in "${filelist[@]}";
-            do
-                gtimeout -sKILL ${single_timeo_sec} squoosh-cli --mozjpeg '{}' -d ./ ${convert_img}
-                if [ $? != 0 ]; then
-                  # タイムアウトしたときの処理
-                  echo -e '\n'${convert_img}' は、タイムアウトのためスキップしました。'
-                fi
-                gtimeout -sKILL ${single_timeo_sec} squoosh-cli --webp '{}' -d ./ ${convert_img}
-                if [ $? != 0 ]; then
-                  # タイムアウトしたときの処理
-                  echo -e '\n'${convert_img}' は、タイムアウトのためスキップしました。'
-                fi
-                i=$(($i - 1))
-                echo '残り'${i}'ファイル'
-            done
-            echo -e '\n./のjpg最適化・webp変換完了。\n'
-
-        else
-
-            # ファイル個数がmaxfilenum以下だったらjpg一括処理
-            echo -e '\n##############################################################\n'${filedir}'のjpg最適化・webp変換を一括処理します。（'${count_img}'ファイル）'
-            i=$((${count_img}*1))
-            gtimeout -sKILL $i squoosh-cli --mozjpeg '{}' -d ./ ./*.jpg
-            if [ $? != 0 ]; then
-              echo -e '/.のjpg最適化およびwebp変換はタイムアウトのため、個別変換に切り替えます。'
-
-              filelist=($(find . -maxdepth 1 -type f -name \*.jpg | sort -n))
-              i=${count_img}
-              for convert_img in "${filelist[@]}";
-              do
-                  gtimeout -sKILL ${single_timeo_sec} squoosh-cli --mozjpeg '{}' -d ./ ${convert_img}
-                  if [ $? != 0 ]; then
-                    # タイムアウトしたときの処理
-                    echo -e '\n'${convert_img}' は、タイムアウトのためスキップしました。'
-                  fi
-                  gtimeout -sKILL ${single_timeo_sec} squoosh-cli --webp '{}' -d ./ ${convert_img}
-                  if [ $? != 0 ]; then
-                    # タイムアウトしたときの処理
-                    echo -e '\n'${convert_img}' は、タイムアウトのためスキップしました。'
-                  fi
-                  i=$(($i - 1))
-                  echo '残り'${i}'ファイル'
-              done
-              echo -e '\n./のjpg最適化・webp変換完了。\n'
-
-            else
-              gtimeout -sKILL $i squoosh-cli --webp '{}' -d ./ ./*.jpg
-              if [ $? != 0 ]; then
-                echo -e '/.のjpgファイルのwebp変換は、タイムアウトのため途中スキップしました。'
-              else
-                echo -e '\n./のjpg最適化・webp変換完了。\n'
-              fi
-            fi
-        fi
-
-        # カレントディレクトリのpngファイルの個数を確認
-        count_img=($(find . -maxdepth 1 -type f -name \*.png | wc -l))
-        if [ $count_img = 0 ] ; then
-            :
-        # ファイル個数がmaxfilenum以上だったら
-        elif [ $count_img -gt $maxfilenum ] ; then
-
-            # pngファイル名一覧を取得し、個別に処理
-            echo -e '\n##############################################################\n./のjpg最適化・webp変換を個別処理します。（'${count_img}'ファイル）'
-            filelist=($(find . -maxdepth 1 -type f -name \*.png | sort -n))
-            i=${count_img}
-            for convert_img in "${filelist[@]}";
-            do
-                gtimeout -sKILL ${single_timeo_sec} squoosh-cli --oxipng '{}' -d ./ ${convert_img}
-                if [ $? != 0 ]; then
-                  # タイムアウトしたときの処理
-                  echo -e '\n'${convert_img}' は、タイムアウトのためスキップしました。'
-                fi
-                gtimeout -sKILL ${single_timeo_sec} squoosh-cli --webp '{}' -d ./ ${convert_img}
-                if [ $? != 0 ]; then
-                  # タイムアウトしたときの処理
-                  echo -e '\n'${convert_img}' は、タイムアウトのためスキップしました。'
-                fi
-                i=$(($i - 1))
-                echo '残り'${i}'ファイル'
-            done
-            echo -e '\n./のpng最適化・webp変換完了。\n'
-
-        else
-
-            # ファイル個数がmaxfilenum以下だったらpng一括処理
-            echo -e '\n##############################################################\n'${filedir}'のjpg最適化・webp変換を一括処理します。（'${count_img}'ファイル）'
-            i=$((${count_img}*1))
-            gtimeout -sKILL $i squoosh-cli --oxipng '{}' -d ./ ./*.png
-            if [ $? != 0 ]; then
-              echo -e '/.のpng最適化およびwebp変換タイムアウトのため、個別変換に切り替えます。'
-
-              filelist=($(find . -maxdepth 1 -type f -name \*.png | sort -n))
-              i=${count_img}
-              for convert_img in "${filelist[@]}";
-              do
-                  gtimeout -sKILL ${single_timeo_sec} squoosh-cli --oxipng '{}' -d ./ ${convert_img}
-                  if [ $? != 0 ]; then
-                    # タイムアウトしたときの処理
-                    echo -e '\n'${convert_img}' は、タイムアウトのためスキップしました。'
-                  fi
-                  gtimeout -sKILL ${single_timeo_sec} squoosh-cli --webp '{}' -d ./ ${convert_img}
-                  if [ $? != 0 ]; then
-                    # タイムアウトしたときの処理
-                    echo -e '\n'${convert_img}' は、タイムアウトのためスキップしました。'
-                  fi
-                  i=$(($i - 1))
-                  echo '残り'${i}'ファイル'
-              done
-              echo -e '\n./のpng最適化・webp変換完了。\n'
-
-            else
-              gtimeout -sKILL $i squoosh-cli --webp '{}' -d ./ ./*.png
-              if [ $? != 0 ]; then
-                echo -e '/.のpngファイルのwebp変換は、タイムアウトのため途中スキップしました。'
-              else
-                echo -e '\n./のpng最適化・webp変換完了。\n'
-              fi
-            fi
-        fi
-
-        break;;
-    "jpg・pngを圧縮のみ")
-        # ディレクトリ一覧取得
-        dirlist=($(find . -mindepth 1 -type d -name \*))
-
-        # ディレクトリ毎に処理を行うため、変数dirlistを配列で処理
-        for filedir in "${dirlist[@]}";
-        do
-            # jpgファイルの個数を確認
-            count_img=($(find ${filedir} -maxdepth 1 -type f -name \*.jpg | wc -l))
-            if [ $count_img = 0 ] ; then
-                :
-            # ファイル個数がmaxfilenum以上だったら
-            elif [ $count_img -gt $maxfilenum ] ; then
-
-                # jpgファイル名一覧を取得し、個別に処理
-                echo -e '\n##############################################################\n'${filedir}'のjpg最適化を個別処理します。（'${count_img}'ファイル）'
-                filelist=($(find ${filedir} -maxdepth 1 -type f -name \*.jpg | sort -n))
-                i=${count_img}
-                for convert_img in "${filelist[@]}";
-                do
-                    gtimeout -sKILL ${single_timeo_sec} squoosh-cli --mozjpeg '{}' -d ${filedir}/ ${convert_img}
-                    if [ $? != 0 ]; then
-                      # タイムアウトしたときの処理
-                      echo -e '\n'${convert_img}' は、タイムアウトのためスキップしました。'
-                    fi
-                    i=$(($i - 1))
-                    echo '残り'${i}'ファイル'
-                done
-                echo -e '\n'${filedir}'のjpg最適化完了。\n'
-
-            else
-
-                # ファイル個数がmaxfilenum以下だったらjpg一括処理
-                echo -e '\n##############################################################\n'${filedir}'のjpg最適化を一括処理します。（'${count_img}'ファイル）'
-                i=$((${count_img}*1))
-                gtimeout -sKILL $i squoosh-cli --mozjpeg '{}' -d ${filedir}/ ${filedir}/*.jpg
-                if [ $? != 0 ]; then
-                  echo -e '\n'${filedir}' のjpg最適化はタイムアウトのため、個別変換に切り替えます。'
-
-                  filelist=($(find ${filedir} -maxdepth 1 -type f -name \*.jpg | sort -n))
-                  i=${count_img}
-                  for convert_img in "${filelist[@]}";
-                  do
-                      gtimeout -sKILL ${single_timeo_sec} squoosh-cli --mozjpeg '{}' -d ${filedir}/ ${convert_img}
-                      if [ $? != 0 ]; then
-                        # タイムアウトしたときの処理
-                        echo -e '\n'${convert_img}' は、タイムアウトのためスキップしました。'
-                      fi
-                      i=$(($i - 1))
-                      echo '残り'${i}'ファイル'
-                  done
-                  echo -e '\n'${filedir}'のjpg最適化完了。\n'
-
-                else
-                  echo -e '\n'${filedir}'のjpg最適化完了。\n'
-                fi
-            fi
-
-            count_img=($(find ${filedir} -maxdepth 1 -type f -name \*.png | wc -l))
-            if [ $count_img = 0 ] ; then
-                :
-            # ファイル個数がmaxfilenum以上だったら
-            elif [ $count_img -gt $maxfilenum ] ; then
-
-                # pngファイル名一覧を取得し、個別に処理
-                echo -e '\n##############################################################\n'${filedir}'のpng最適化を個別処理します。（'${count_img}'ファイル）'
-                filelist=($(find ${filedir} -maxdepth 1 -type f -name \*.png | sort -n))
-                i=${count_img}
-                for convert_img in "${filelist[@]}";
-                do
-                    gtimeout -sKILL ${single_timeo_sec} squoosh-cli --oxipng '{}' -d ${filedir}/ ${convert_img}
-                    if [ $? != 0 ]; then
-                      # タイムアウトしたときの処理
-                      echo -e '\n'${convert_img}' は、タイムアウトのためスキップしました。'
-                    fi
-                    i=$(($i - 1))
-                    echo '残り'${i}'ファイル'
-                done
-                echo -e '\n'${filedir}'のpng最適化完了。\n'
-
-            else
-
-                # ファイル個数がmaxfilenum以下だったらpng一括処理
-                echo -e '\n##############################################################\n'${filedir}'のpng最適化を一括処理します。（'${count_img}'ファイル）'
-                i=$((${count_img}*1))
-                gtimeout -sKILL $i squoosh-cli --oxipng '{}' -d ${filedir}/ ${filedir}/*.png
-                if [ $? != 0 ]; then
-                  echo -e '\n'${filedir}' のpng最適化はタイムアウトのため、個別変換に切り替えます。'
-
-                  filelist=($(find ${filedir} -maxdepth 1 -type f -name \*.png | sort -n))
-                  i=${count_img}
-                  for convert_img in "${filelist[@]}";
-                  do
-                      gtimeout -sKILL ${single_timeo_sec} squoosh-cli --oxipng '{}' -d ${filedir}/ ${convert_img}
-                      if [ $? != 0 ]; then
-                        # タイムアウトしたときの処理
-                        echo -e '\n'${convert_img}' は、タイムアウトのためスキップしました。'
-                      fi
-                      i=$(($i - 1))
-                      echo '残り'${i}'ファイル'
-                  done
-                  echo -e '\n'${filedir}'のpng最適化完了。\n'
-
-                else
-                  echo -e '\n'${filedir}'のpng最適化完了。\n'
-                fi
-            fi
-        done
-
-        # カレントディレクトリのjpgファイルの個数を確認
-        count_img=($(find . -maxdepth 1 -type f -name \*.jpg | wc -l))
-        if [ $count_img = 0 ] ; then
-            :
-        # ファイル個数がmaxfilenum以上だったら
-        elif [ $count_img -gt $maxfilenum ] ; then
-
-            # jpgファイル名一覧を取得し、個別に処理
-            echo -e '\n##############################################################\n./のjpg最適化・webp変換を個別処理します。（'${count_img}'ファイル）'
-            filelist=($(find . -maxdepth 1 -type f -name \*.jpg | sort -n))
-            i=${count_img}
-            for convert_img in "${filelist[@]}";
-            do
-                gtimeout -sKILL ${single_timeo_sec} squoosh-cli --mozjpeg '{}' -d ./ ${convert_img}
-                if [ $? != 0 ]; then
-                  # タイムアウトしたときの処理
-                  echo -e '\n'${convert_img}' は、タイムアウトのためスキップしました。'
-                fi
-                i=$(($i - 1))
-                echo '残り'${i}'ファイル'
-            done
-            echo -e '\n./のjpg最適化完了。\n'
-
-        else
-
-            # ファイル個数がmaxfilenum以下だったらjpg一括処理
-            echo -e '\n##############################################################\n'${filedir}'のjpg最適化・webp変換を一括処理します。（'${count_img}'ファイル）'
-            i=$((${count_img}*1))
-            gtimeout -sKILL $i squoosh-cli --mozjpeg '{}' -d ./ ./*.jpg
-            if [ $? != 0 ]; then
-              echo -e '/.のjpg最適化はタイムアウトのため、個別変換に切り替えます。'
-
-              filelist=($(find . -maxdepth 1 -type f -name \*.jpg | sort -n))
-              i=${count_img}
-              for convert_img in "${filelist[@]}";
-              do
-                  gtimeout -sKILL ${single_timeo_sec} squoosh-cli --mozjpeg '{}' -d ./ ${convert_img}
-                  if [ $? != 0 ]; then
-                    # タイムアウトしたときの処理
-                    echo -e '\n'${convert_img}' は、タイムアウトのためスキップしました。'
-                  fi
-                  i=$(($i - 1))
-                  echo '残り'${i}'ファイル'
-              done
-              echo -e '\n./のjpg最適化完了。\n'
-
-            else
-              echo -e '\n./のjpg最適化完了。\n'
-            fi
-        fi
-
-        # カレントディレクトリのpngファイルの個数を確認
-        count_img=($(find . -maxdepth 1 -type f -name \*.png | wc -l))
-        if [ $count_img = 0 ] ; then
-            :
-        # ファイル個数がmaxfilenum以上だったら
-        elif [ $count_img -gt $maxfilenum ] ; then
-
-            # pngファイル名一覧を取得し、個別に処理
-            echo -e '\n##############################################################\n./のjpg最適化・webp変換を個別処理します。（'${count_img}'ファイル）'
-            filelist=($(find . -maxdepth 1 -type f -name \*.png | sort -n))
-            i=${count_img}
-            for convert_img in "${filelist[@]}";
-            do
-                gtimeout -sKILL ${single_timeo_sec} squoosh-cli --oxipng '{}' -d ./ ${convert_img}
-                if [ $? != 0 ]; then
-                  # タイムアウトしたときの処理
-                  echo -e '\n'${convert_img}' は、タイムアウトのためスキップしました。'
-                fi
-                i=$(($i - 1))
-                echo '残り'${i}'ファイル'
-            done
-            echo -e '\n./のpng最適化完了。\n'
-
-        else
-
-            # ファイル個数がmaxfilenum以下だったらpng一括処理
-            echo -e '\n##############################################################\n'${filedir}'のjpg最適化・webp変換を一括処理します。（'${count_img}'ファイル）'
-            i=$((${count_img}*1))
-            gtimeout -sKILL $i squoosh-cli --oxipng '{}' -d ./ ./*.png
-            if [ $? != 0 ]; then
-              echo -e 'カレントディレクトリのpng最適化はタイムアウトのため、個別変換に切り替えます。'
-
-              filelist=($(find . -maxdepth 1 -type f -name \*.png | sort -n))
-              i=${count_img}
-              for convert_img in "${filelist[@]}";
-              do
-                  gtimeout -sKILL ${single_timeo_sec} squoosh-cli --oxipng '{}' -d ./ ${convert_img}
-                  if [ $? != 0 ]; then
-                    # タイムアウトしたときの処理
-                    echo -e '\n'${convert_img}' は、タイムアウトのためスキップしました。'
-                  fi
-                  i=$(($i - 1))
-                  echo '残り'${i}'ファイル'
-              done
-              echo -e '\n./のpng最適化完了。\n'
-
-            else
-              echo -e '\n./のpng最適化完了。\n'
-            fi
-        fi
-
-        break;;
-    "キャンセル")
-      echo '処理をキャンセルしました。'
-      break;;
-    *)
-      echo '入力エラー。1〜3の数字で再度入力してください。';;
-  esac
-done
-# killall Terminal
+echo "処理が終了しました。"
