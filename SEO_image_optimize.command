@@ -36,18 +36,19 @@ then
             source ~/.zshrc
         fi
     fi
-else
-    echo "インストールされているnodeのバージョンを確認します。"
-    if ! node --version | grep v21.7.3 &> /dev/null
-    then
-        echo "nodeのバージョンが21.7.3ではありませんので、インストールして切り替えます。"
-        nvm install stable --latest-npm
-        nvm alias default stable
-        echo "nodeをstableバージョンに切り替えました。"
-    fi
-      echo "node確認完了..."
-      echo ""
 fi
+
+echo "インストールされているnodeのバージョンを確認します。"
+if ! node --version | grep v21.7.3 &> /dev/null
+then
+    echo "nodeのバージョンが21.7.3ではありませんので、インストールして切り替えます。"
+    nvm install stable --latest-npm
+    nvm alias default stable
+    echo "nodeをstableバージョンに切り替えました。"
+fi
+echo "node確認完了..."
+echo ""
+
 
 # package.json を作成
 cat <<EOF >package.json
