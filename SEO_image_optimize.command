@@ -1,13 +1,59 @@
 #!/bin/bash
+source ~/.nvm/nvm.sh
 #MY_DIRNAME=$(dirname $0)
 MY_DIRNAME=$(cd $(dirname $0);pwd)
 cd $MY_DIRNAME
+
+echo "環境構築を開始します..."
+echo ""
+
+# brewがインストールされているか確認
+if ! command -v brew &> /dev/null
+then
+    echo "brewがインストールされていません。"
+    read -p "brewをインストールしますか？ (y/n): " install_brew
+    if [ "$install_brew" = "y" ]; then
+        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    fi
+else
+    echo "brewとインストールされているパッケージを更新します。"
+    brew update
+    brew upgrade
+fi
+
+echo "brew確認完了..."
+echo ""
+
+if ! command -v nvm &> /dev/null
+then
+    echo "nvmがインストールされていません。"
+    read -p "nvmをインストールしますか？ (y/n): " install_nvm
+    if [ "$install_nvm" = "y" ]; then
+        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+        if [ -f ~/.bash_profile ]; then
+            source ~/.bash_profile
+        elif [ -f ~/.zshrc ]; then
+            source ~/.zshrc
+        fi
+    fi
+else
+    echo "インストールされているnodeのバージョンを確認します。"
+    if ! node --version | grep v21.7.3 &> /dev/null
+    then
+        echo "nodeのバージョンが21.7.3ではありませんので、インストールして切り替えます。"
+        nvm install stable --latest-npm
+        nvm alias default stable
+        echo "nodeをstableバージョンに切り替えました。"
+    fi
+      echo "node確認完了..."
+      echo ""
+fi
 
 # package.json を作成
 cat <<EOF >package.json
 {
   "name": "image-format-converter",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "license": "UNLICENSED",
   "private": true,
   "scripts": {
@@ -202,12 +248,16 @@ EOF
 echo "image-format-converter.jsを作成しました。"
 
 # 依存関係をインストール
-echo "環境構築を開始します..."
+echo "依存関係をインストールします..."
 npm i ansi-colors fancy-log globule sharp -D
+echo "依存関係をインストールしました..."
+echo ""
 
 # スクリプトを実行
 echo "画像変換処理を開始します..."
 npm run image-format-converter
+echo "画像変換処理を完了しました..."
+echo ""
 
 # クリーンアップ
 echo "クリーンアップを開始します..."
